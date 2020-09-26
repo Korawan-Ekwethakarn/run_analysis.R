@@ -8,84 +8,100 @@ September 26, 2020
 • today any how to make data tiny
 • Raw data → processing script → tidy data → data analysis → data communication
 
-#install.packages("dplyr")
-#install.packages("data.table")
-#Load packages
-library(data.table)
+##---------------------------------------------------
+## Load both datasets and label them with feature names
+##---------------------------------------------------
+
+test <- read.table("./test/X_test.txt")
+train <- read.table("./train/X_train.txt")
+featname  <- read.table("features.txt", colClasses = "character")
+featvec <- featname$V2
+featvec <- tolower(featvec)
+featvec <- gsub("\\()","",featvec)
+featvec <- gsub("-","",featvec)
+names(test) <- featvec
+names(train) <- featvec
+rm(featname,featvec)
+
+##---------------------------------------------------
+## Select columns of mean and std from the 561 columns
+##---------------------------------------------------
+a <- grep("mean",names(test))
+b <- grep("meanfreq",names(test))
+c <- grep("angle",names(test))
+x <- setdiff(a,b)
+colselectmean <- setdiff(x,c)
+colselectstd <- grep("std",names(test))
+test <- test[,c(colselectmean,colselectstd)]
+
+a <- grep("mean",names(train))
+b <- grep("meanfreq",names(train))
+c <- grep("angle",names(train))
+x <- setdiff(a,b)
+colselectmean <- setdiff(x,c)
+colselectstd <- grep("std",names(train))
+train <- train[,c(colselectmean,colselectstd)]
+rm(a,b,x,c,colselectstd,colselectmean)
+
+##---------------------------------------------------
+## Add activitylabel column to both the datasets
+##---------------------------------------------------
+testact <- read.table("./test/y_test.txt")
+trainact <- read.table("./train/y_train.txt")
+names(testact) <- "activitylabel"
+names(trainact) <- "activitylabel"
+test <- cbind(test, testact)
+train <- cbind(train, trainact)
+rm(trainact,testact)
+
+##---------------------------------------------------
+## Add descriptive names to content of activitylabel column
+##---------------------------------------------------
+
+test$activitylabel <- sub("1","walking",test$activitylabel)
+test$activitylabel <- sub("2","walking_upstairs",test$activitylabel)
+test$activitylabel <- sub("3","walking_downstairs",test$activitylabel)
+test$activitylabel <- sub("4","sitting",test$activitylabel)
+test$activitylabel <- sub("5","standing",test$activitylabel)
+test$activitylabel <- sub("6","laying",test$activitylabel)
+
+train$activitylabel <- sub("1","walking",train$activitylabel)
+train$activitylabel <- sub("2","walking_upstairs",train$activitylabel)
+train$activitylabel <- sub("3","walking_downstairs",train$activitylabel)
+train$activitylabel <- sub("4","sitting",train$activitylabel)
+train$activitylabel <- sub("5","standing",train$activitylabel)
+train$activitylabel <- sub("6","laying",train$activitylabel)
+
+##---------------------------------------------------
+## Add subject column to both the datasets
+##---------------------------------------------------
+
+testsub <- read.table("./test/subject_test.txt")
+trainsub <- read.table("./train/subject_train.txt")
+names(testsub) <- "subject"
+names(trainsub) <- "subject"
+test <- cbind(test, testsub)
+train <- cbind(train, trainsub)
+rm(trainsub,testsub)
+
+##---------------------------------------------------
+## Merge both the datasets together 
+##---------------------------------------------------
+
+data <- rbind(test,train)
+rm(test,train)
+
+##---------------------------------------------------
+## Find average values wrt subject and activity
+##---------------------------------------------------
+
+library(plyr)
 library(dplyr)
 
-#Set your working directory
-setwd("C:/Users/ashenfkt/Google Drive/Dashboard/R_April2017/PhoenixRising/Coursera")
+act <- data %>% 
+group_by(activitylabel,subject) %>% 
+summarise_each(funs(mean))
 
-#Download UCI data files from the web, unzip them, and specify time/date settings
-URL <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
-destFile <- "CourseDataset.zip"
-if (!file.exists(destFile)){
-  download.file(URL, destfile = destFile, mode='wb')
-}
-if (!file.exists("./UCI_HAR_Dataset")){
-  unzip(destFile)
-}
-dateDownloaded <- date()
+write.table(act, "./tidyset.txt", row.names = FALSE)
 
-#Start reading files
-setwd("./UCI_HAR_Dataset")
-
-###Reading Activity files
-ActivityTest <- read.table("./test/y_test.txt", header = F)
-ActivityTrain <- read.table("./train/y_train.txt", header = F)
-
-###Read features files
-FeaturesTest <- read.table("./test/X_test.txt", header = F)
-FeaturesTrain <- read.table("./train/X_train.txt", header = F)
-
-#Read subject files
-SubjectTest <- read.table("./test/subject_test.txt", header = F)
-SubjectTrain <- read.table("./train/subject_train.txt", header = F)
-
-####Read Activity Labels
-ActivityLabels <- read.table("./activity_labels.txt", header = F)
-
-#####Read Feature Names
-FeaturesNames <- read.table("./features.txt", header = F)
-
-#####Merg dataframes: Features Test&Train,Activity Test&Train, Subject Test&Train
-FeaturesData <- rbind(FeaturesTest, FeaturesTrain)
-SubjectData <- rbind(SubjectTest, SubjectTrain)
-ActivityData <- rbind(ActivityTest, ActivityTrain)
-
-####Renaming colums in ActivityData & ActivityLabels dataframes
-names(ActivityData) <- "ActivityN"
-names(ActivityLabels) <- c("ActivityN", "Activity")
-
-####Get factor of Activity names
-Activity <- left_join(ActivityData, ActivityLabels, "ActivityN")[, 2]
-
-####Rename SubjectData columns
-names(SubjectData) <- "Subject"
-#Rename FeaturesData columns using columns from FeaturesNames
-names(FeaturesData) <- FeaturesNames$V2
-
-###Create one large Dataset with only these variables: SubjectData,  Activity,  FeaturesData
-DataSet <- cbind(SubjectData, Activity)
-DataSet <- cbind(DataSet, FeaturesData)
-
-###Create New datasets by extracting only the measurements on the mean and standard deviation for each measurement
-subFeaturesNames <- FeaturesNames$V2[grep("mean\\(\\)|std\\(\\)", FeaturesNames$V2)]
-DataNames <- c("Subject", "Activity", as.character(subFeaturesNames))
-DataSet <- subset(DataSet, select=DataNames)
-
-#####Rename the columns of the large dataset using more descriptive activity names
-names(DataSet)<-gsub("^t", "time", names(DataSet))
-names(DataSet)<-gsub("^f", "frequency", names(DataSet))
-names(DataSet)<-gsub("Acc", "Accelerometer", names(DataSet))
-names(DataSet)<-gsub("Gyro", "Gyroscope", names(DataSet))
-names(DataSet)<-gsub("Mag", "Magnitude", names(DataSet))
-names(DataSet)<-gsub("BodyBody", "Body", names(DataSet))
-
-####Create a second, independent tidy data set with the average of each variable for each activity and each subject
-SecondDataSet<-aggregate(. ~Subject + Activity, DataSet, mean)
-SecondDataSet<-SecondDataSet[order(SecondDataSet$Subject,SecondDataSet$Activity),]
-
-#Save this tidy dataset to local file
-write.table(SecondDataSet, file = "tidydata.txt",row.name=FALSE)
+##---------------------------------------------------
